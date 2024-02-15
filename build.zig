@@ -22,8 +22,6 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    exe.addIncludePath(.{ .path = "./zig-out/lib" });
-
     {
         const lib = b.addSharedLibrary(.{
             .name = "game",
