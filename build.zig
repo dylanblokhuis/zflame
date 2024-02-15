@@ -22,6 +22,8 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    exe.linkLibC();
+
     {
         const lib = b.addSharedLibrary(.{
             .name = "game",
