@@ -1,15 +1,32 @@
 const std = @import("std");
 const game = @import("./game.zig");
 
+const Game = struct {
+    init: fn () void,
+    // update: fn () void,
+    // render: fn () void,
+};
+
 pub fn main() !void {
-    // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
     std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
 
     var library = try std.DynLib.open("./zig-out/lib/libgame.dylib");
-    const func: *const u32 = undefined;
-    const symbol = &library.lookup(@TypeOf(func), "yo");
+    defer library.close();
 
-    if (symbol.*) |ptr| {
-        std.debug.print("symbol value: {any}\n", .{ptr.*});
+    const func: *const fn () void = undefined;
+    const game_init_symbol = &library.lookup(@TypeOf(func), "game_init");
+    const game_update_symbol = &library.lookup(@TypeOf(func), "game_update");
+    const game_shutdown_symbol = &library.lookup(@TypeOf(func), "game_shutdown");
+
+    if (game_init_symbol.*) |ptr| {
+        ptr();
+    }
+
+    if (game_update_symbol.*) |ptr| {
+        ptr();
+    }
+
+    if (game_shutdown_symbol.*) |ptr| {
+        ptr();
     }
 }

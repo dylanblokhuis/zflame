@@ -11,6 +11,7 @@ export fn game_init() void {
         std.debug.print("Failed to allocate memory\n", .{});
         return;
     };
+    game_memory.some_state = 0;
 }
 
 export fn game_update() void {
