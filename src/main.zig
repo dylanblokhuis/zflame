@@ -12,9 +12,7 @@ const GameApi = struct {
     const Self = @This();
 
     pub fn init(path: []const u8) !Self {
-        printStr("here!");
         var library = try std.DynLib.open(path);
-        printStr("here2!");
         const func: *const fn () void = undefined;
         const game_init_symbol = &library.lookup(@TypeOf(func), "game_init");
         const game_update_symbol = &library.lookup(@TypeOf(func), "game_update");
@@ -23,8 +21,6 @@ const GameApi = struct {
         const game_memory_symbol = &library.lookup(@TypeOf(game_memory_cb), "get_game_memory");
         const set_memory_cb: *const fn (*anyopaque) void = undefined;
         const set_memory_symbol = &library.lookup(@TypeOf(set_memory_cb), "set_game_memory");
-        printStr("here3!");
-        // check if all symbols exist
 
         return Self{
             .init = game_init_symbol.*.?,
@@ -37,26 +33,29 @@ const GameApi = struct {
     }
 
     pub fn unload(self: *Self) void {
-        // self.shutdown();
+        self.init = undefined;
+        self.update = undefined;
+        self.shutdown = undefined;
+        self.get_memory = undefined;
+        self.set_memory = undefined;
         self.lib.close();
-        // self.init = undefined;
-        // self.update = undefined;
-        // self.shutdown = undefined;
-        // self.get_memory = undefined;
-        // self.set_memory = undefined;
+        self.lib = undefined;
     }
 };
 
 const Game = struct {
     api: GameApi,
-    last_mod_time: i128,
+    lib_name: []const u8,
+    allocator: std.mem.Allocator,
 
     const Self = @This();
 
-    pub fn init() !Self {
+    pub fn init(allocator: std.mem.Allocator) !Self {
+        const lib_name = try Game.get_lib_path(allocator);
         return Self{
-            .api = try GameApi.init(Game.get_lib_path()),
-            .last_mod_time = 0,
+            .api = try GameApi.init(lib_name),
+            .lib_name = lib_name,
+            .allocator = allocator,
         };
     }
 
@@ -65,48 +64,72 @@ const Game = struct {
         while (true) {
             try self.check_for_new_lib();
             self.api.update();
-
-            std.time.sleep(std.time.ns_per_s * 0.5);
         }
     }
 
-    fn get_lib_path() []const u8 {
-        const path = "./zig-out/lib/libgame";
-        return switch (builtin.os.tag) {
-            .linux => path ++ ".so",
-            .windows => path ++ ".dll",
-            .macos, .tvos, .watchos, .ios => path ++ ".dylib",
+    /// scans the zig-out directory for the game library and its version
+    ///
+    /// example file name: ``libgame-4.so``, with 4 being the version
+    fn get_lib_path(alloc: std.mem.Allocator) ![]const u8 {
+        const path = "./zig-out/lib";
+
+        const lib_files = try std.fs.cwd().openDir(path, .{
+            .iterate = true,
+        });
+
+        var iterator = lib_files.iterate();
+
+        var current_highest_version: u32 = 0;
+        while (try iterator.next()) |entry| {
+            var iter = std.mem.splitSequence(u8, entry.name, "-");
+
+            // skip first part, which is the libname
+            _ = iter.next();
+
+            if (iter.next()) |lib_version| {
+                // remove last 3 bytes
+                const version_num = std.fmt.parseInt(u32, lib_version[0..(lib_version.len - 3)], 10) catch {
+                    continue;
+                };
+                if (version_num > current_highest_version) {
+                    current_highest_version = version_num;
+                }
+            }
+        }
+        const lib_name = "libgame";
+        const extension = switch (builtin.os.tag) {
+            .linux => ".so",
+            .windows => ".dll",
+            .macos, .tvos, .watchos, .ios => ".dylib",
             else => return std.debug.panic("Unsupported OS.\n"),
         };
+
+        return try std.fmt.allocPrint(alloc, "{s}/{s}-{d}{s}", .{ path, lib_name, current_highest_version, extension });
     }
 
     pub fn check_for_new_lib(self: *Self) !void {
-        const file = try std.fs.cwd().openFile(Game.get_lib_path(), .{});
-        defer file.close();
-        const stat = try file.stat();
+        const current_highest_version = try Game.get_lib_path(self.allocator);
+        defer self.allocator.free(current_highest_version);
 
-        if (self.last_mod_time == 0) {
-            self.last_mod_time = stat.mtime;
+        if (std.mem.eql(u8, self.lib_name, current_highest_version)) {
+            return;
         }
 
-        if (stat.mtime > self.last_mod_time) {
-            printStr("Prob should just reload the game here");
-            std.time.sleep(std.time.ns_per_s * 2.0);
+        std.debug.print("Reloading game with version: {s}\n", .{current_highest_version});
+        std.time.sleep(std.time.ns_per_s * 0.3);
 
-            const game_memory = self.api.get_memory();
-            self.api.unload();
+        const game_memory = self.api.get_memory();
 
-            const api = GameApi.init(Game.get_lib_path()) catch {
-                printStr("Failed to reload game, this frame, will try again next frame.");
-                return;
-            };
-            api.set_memory(game_memory);
+        // this segfaults on linux, but works on macos..
+        // self.api.unload();
 
-            self.api = api;
-            self.last_mod_time = stat.mtime;
-        }
-
-        // printAny(stat.mtime);
+        const api = GameApi.init(current_highest_version) catch {
+            printStr("Failed to reload game, this frame, will try again next frame.");
+            return;
+        };
+        api.set_memory(game_memory);
+        self.api = api;
+        self.lib_name = current_highest_version;
     }
 
     pub fn destroy(self: *Self) void {
@@ -116,7 +139,10 @@ const Game = struct {
 };
 
 pub fn main() !void {
-    var game = try Game.init();
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
+
+    var game = try Game.init(allocator);
     defer game.destroy();
 
     try game.run();

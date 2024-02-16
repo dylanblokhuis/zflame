@@ -14,7 +14,7 @@ export fn game_init() void {
 
 export fn game_update() void {
     game_memory.some_state += 1;
-    std.debug.print("some_state!!!: {any}\n", .{game_memory.some_state});
+    std.debug.print("some_state!!!!: {any}\n", .{game_memory.some_state});
 }
 
 export fn game_shutdown() void {
