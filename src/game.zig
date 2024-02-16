@@ -2,7 +2,7 @@ const std = @import("std");
 const GameMemory = struct { some_state: u32 };
 
 var game_memory: *GameMemory = undefined;
-const allocator = std.heap.page_allocator;
+const allocator = std.heap.c_allocator;
 
 export fn game_init() void {
     game_memory = allocator.create(GameMemory) catch {

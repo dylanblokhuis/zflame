@@ -1,5 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const glfw = @import("mach-glfw");
 
 const GameApi = struct {
     init: *const fn () void,
@@ -47,22 +48,42 @@ const Game = struct {
     api: GameApi,
     lib_name: []const u8,
     allocator: std.mem.Allocator,
+    window: *glfw.Window,
 
     const Self = @This();
 
-    pub fn init(allocator: std.mem.Allocator) !Self {
+    pub fn init(allocator: std.mem.Allocator, window: *glfw.Window) !Self {
         const lib_name = try Game.get_lib_path(allocator);
         return Self{
             .api = try GameApi.init(lib_name),
             .lib_name = lib_name,
             .allocator = allocator,
+            .window = window,
         };
     }
 
     pub fn run(self: *Self) !void {
         self.api.init();
-        while (true) {
-            try self.check_for_new_lib();
+        self.window.setUserPointer(self);
+
+        while (!self.window.shouldClose()) {
+            const key_callback = struct {
+                fn callback(window: glfw.Window, key: glfw.Key, scancode: i32, action: glfw.Action, mods: glfw.Mods) void {
+                    const game = window.getUserPointer(Game) orelse unreachable;
+                    _ = scancode;
+
+                    if (key == .r and mods.control and action == .press) {
+                        game.check_for_new_lib() catch {
+                            printStr("Failed to check for new game lib");
+                        };
+                    }
+                }
+            }.callback;
+
+            self.window.setKeyCallback(key_callback);
+
+            // self.window.swapBuffers();
+            glfw.pollEvents();
             self.api.update();
         }
     }
@@ -138,11 +159,35 @@ const Game = struct {
     }
 };
 
+// Default GLFW error handling callback
+fn errorCallback(error_code: glfw.ErrorCode, description: [:0]const u8) void {
+    std.log.err("glfw: {}: {s}\n", .{ error_code, description });
+}
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
+    defer {
+        const deinit_status = gpa.deinit();
+        //fail test; can't try in defer as defer is executed after we return
+        std.debug.print("Deinit status: {any}\n", .{deinit_status});
+    }
 
-    var game = try Game.init(allocator);
+    glfw.setErrorCallback(errorCallback);
+    if (!glfw.init(.{})) {
+        std.log.err("failed to initialize GLFW: {?s}", .{glfw.getErrorString()});
+        std.process.exit(1);
+    }
+    defer glfw.terminate();
+
+    // Create our window
+    var window = glfw.Window.create(1280, 720, "Hello, mach-glfw!", null, null, .{}) orelse {
+        std.log.err("failed to create GLFW window: {?s}", .{glfw.getErrorString()});
+        std.process.exit(1);
+    };
+    defer window.destroy();
+
+    var game = try Game.init(allocator, &window);
     defer game.destroy();
 
     try game.run();

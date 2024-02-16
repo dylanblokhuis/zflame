@@ -23,6 +23,11 @@ pub fn build(b: *std.Build) !void {
     });
 
     exe.linkLibC();
+    const glfw_dep = b.dependency("mach-glfw", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    exe.root_module.addImport("mach-glfw", glfw_dep.module("mach-glfw"));
 
     {
         const lib_name = blk: {
@@ -51,6 +56,8 @@ pub fn build(b: *std.Build) !void {
             .target = target,
             .optimize = optimize,
         });
+
+        lib.linkLibC();
 
         b.installArtifact(lib);
     }
