@@ -12,9 +12,7 @@ const GameApi = struct {
     const Self = @This();
 
     pub fn init(path: []const u8) !Self {
-        printStr("here!");
         var library = try std.DynLib.open(path);
-        printStr("here2!");
         const func: *const fn () void = undefined;
         const game_init_symbol = &library.lookup(@TypeOf(func), "game_init");
         const game_update_symbol = &library.lookup(@TypeOf(func), "game_update");
@@ -23,7 +21,6 @@ const GameApi = struct {
         const game_memory_symbol = &library.lookup(@TypeOf(game_memory_cb), "get_game_memory");
         const set_memory_cb: *const fn (*anyopaque) void = undefined;
         const set_memory_symbol = &library.lookup(@TypeOf(set_memory_cb), "set_game_memory");
-        printStr("here3!");
         // check if all symbols exist
 
         return Self{
@@ -65,8 +62,6 @@ const Game = struct {
         while (true) {
             try self.check_for_new_lib();
             self.api.update();
-
-            std.time.sleep(std.time.ns_per_s * 0.5);
         }
     }
 
@@ -90,8 +85,8 @@ const Game = struct {
         }
 
         if (stat.mtime > self.last_mod_time) {
-            printStr("Prob should just reload the game here");
-            std.time.sleep(std.time.ns_per_s * 2.0);
+            printStr("Reloading game...");
+            std.time.sleep(std.time.ns_per_s * 0.5);
 
             const game_memory = self.api.get_memory();
             self.api.unload();
