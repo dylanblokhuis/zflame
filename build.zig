@@ -30,6 +30,13 @@ pub fn build(b: *std.Build) !void {
             .optimize = optimize,
         });
 
+        // we should grab this from the $VULKAN_SDK folder
+        const xml_path: []const u8 = b.pathFromRoot("vk.xml");
+        std.debug.print("xml_path: {s}\n", .{xml_path});
+        const vkzig_dep = b.dependency("vulkan_zig", .{
+            .registry = xml_path,
+        });
+
         const lib_name = blk: {
             const lib_files = std.fs.cwd().openDir("./zig-out/lib", .{
                 .iterate = true,
@@ -57,6 +64,7 @@ pub fn build(b: *std.Build) !void {
             .optimize = optimize,
         });
         lib.root_module.addImport("mach-glfw", glfw_dep.module("mach-glfw"));
+        lib.root_module.addImport("vulkan_zig", vkzig_dep.module("vulkan-zig"));
         lib.linkLibC();
 
         b.installArtifact(lib);

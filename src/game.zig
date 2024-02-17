@@ -1,5 +1,80 @@
 const std = @import("std");
 const glfw = @import("mach-glfw");
+const vk = @import("vulkan_zig");
+
+const BaseDispatch = vk.BaseWrapper(.{
+    .createInstance = true,
+    .getInstanceProcAddr = true,
+});
+
+const InstanceDispatch = vk.InstanceWrapper(.{
+    .destroyInstance = true,
+    .createDevice = true,
+    .destroySurfaceKHR = true,
+    .enumeratePhysicalDevices = true,
+    .getPhysicalDeviceProperties = true,
+    .enumerateDeviceExtensionProperties = true,
+    .getPhysicalDeviceSurfaceFormatsKHR = true,
+    .getPhysicalDeviceSurfacePresentModesKHR = true,
+    .getPhysicalDeviceSurfaceCapabilitiesKHR = true,
+    .getPhysicalDeviceQueueFamilyProperties = true,
+    .getPhysicalDeviceSurfaceSupportKHR = true,
+    .getPhysicalDeviceMemoryProperties = true,
+    .getDeviceProcAddr = true,
+});
+
+const DeviceDispatch = vk.DeviceWrapper(.{
+    .destroyDevice = true,
+    .getDeviceQueue = true,
+    .createSemaphore = true,
+    .createFence = true,
+    .createImageView = true,
+    .destroyImageView = true,
+    .destroySemaphore = true,
+    .destroyFence = true,
+    .getSwapchainImagesKHR = true,
+    .createSwapchainKHR = true,
+    .destroySwapchainKHR = true,
+    .acquireNextImageKHR = true,
+    .deviceWaitIdle = true,
+    .waitForFences = true,
+    .resetFences = true,
+    .queueSubmit = true,
+    .queuePresentKHR = true,
+    .createCommandPool = true,
+    .destroyCommandPool = true,
+    .allocateCommandBuffers = true,
+    .freeCommandBuffers = true,
+    .queueWaitIdle = true,
+    .createShaderModule = true,
+    .destroyShaderModule = true,
+    .createPipelineLayout = true,
+    .destroyPipelineLayout = true,
+    .createRenderPass = true,
+    .destroyRenderPass = true,
+    .createGraphicsPipelines = true,
+    .destroyPipeline = true,
+    .createFramebuffer = true,
+    .destroyFramebuffer = true,
+    .beginCommandBuffer = true,
+    .endCommandBuffer = true,
+    .allocateMemory = true,
+    .freeMemory = true,
+    .createBuffer = true,
+    .destroyBuffer = true,
+    .getBufferMemoryRequirements = true,
+    .mapMemory = true,
+    .unmapMemory = true,
+    .bindBufferMemory = true,
+    .cmdBeginRenderPass = true,
+    .cmdEndRenderPass = true,
+    .cmdBindPipeline = true,
+    .cmdDraw = true,
+    .cmdSetViewport = true,
+    .cmdSetScissor = true,
+    .cmdBindVertexBuffers = true,
+    .cmdCopyBuffer = true,
+});
 
 const Game = struct {
     window: glfw.Window,
@@ -11,6 +86,13 @@ const Game = struct {
         game.window = window;
         game.update_status = .nothing;
         game.init_window_callbacks();
+
+        // const vkb = try BaseDispatch.load(null);
+        // const instance = try vkb.createInstance(null, null);
+        // const vki = try InstanceDispatch.load(instance, null);
+        // const vkd = try DeviceDispatch.load(instance, null, null);
+        // vkd.createGraphi
+        // instance.
     }
 
     pub fn init_window_callbacks(self: *Self) void {
