@@ -39,8 +39,8 @@
         //    .path = "foo",
         //},
         .@"mach-glfw" = .{
-            .url = "https://codeload.github.com/dylanblokhuis/mach-glfw/tar.gz/90aa8c0dc671af9049e43c9dbe948ebe7beaa9c8",
-            .hash = "1220edb8343fe4ced2a480bde323232551cdbdaaa2eac711503d91eb7352b2d3beb0",
+            .url = "https://codeload.github.com/dylanblokhuis/mach-glfw/tar.gz/f0691e1af06b6252346b05e5acc125c1ca007bf2",
+            .hash = "12201340bbfeeb6284ef11785ec40c9ba7c332dd262146d4ff4b9d1bb1a640c9001a",
         },
     },
 

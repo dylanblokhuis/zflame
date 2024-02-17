@@ -1,10 +1,9 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const glfw = @import("mach-glfw");
 
 const GameApi = struct {
     init: *const fn () void,
-    update: *const fn () void,
+    update: *const fn () c_int,
     shutdown: *const fn () void,
     get_memory: *const fn () *anyopaque,
     set_memory: *const fn (*anyopaque) void,
@@ -14,14 +13,12 @@ const GameApi = struct {
 
     pub fn init(path: []const u8) !Self {
         var library = try std.DynLib.open(path);
-        const func: *const fn () void = undefined;
-        const game_init_symbol = &library.lookup(@TypeOf(func), "game_init");
-        const game_update_symbol = &library.lookup(@TypeOf(func), "game_update");
-        const game_shutdown_symbol = &library.lookup(@TypeOf(func), "game_shutdown");
-        const game_memory_cb: *const fn () *anyopaque = undefined;
-        const game_memory_symbol = &library.lookup(@TypeOf(game_memory_cb), "get_game_memory");
-        const set_memory_cb: *const fn (*anyopaque) void = undefined;
-        const set_memory_symbol = &library.lookup(@TypeOf(set_memory_cb), "set_game_memory");
+        const game_init_symbol = &library.lookup(*const fn () void, "game_init");
+
+        const game_update_symbol = &library.lookup(*const fn () c_int, "game_update");
+        const game_shutdown_symbol = &library.lookup(*const fn () void, "game_shutdown");
+        const game_memory_symbol = &library.lookup(*const fn () *anyopaque, "get_game_memory");
+        const set_memory_symbol = &library.lookup(*const fn (*anyopaque) void, "set_game_memory");
 
         return Self{
             .init = game_init_symbol.*.?,
@@ -48,44 +45,53 @@ const Game = struct {
     api: GameApi,
     lib_name: []const u8,
     allocator: std.mem.Allocator,
-    window: *glfw.Window,
 
     const Self = @This();
 
-    pub fn init(allocator: std.mem.Allocator, window: *glfw.Window) !Self {
+    pub fn init(allocator: std.mem.Allocator) !Self {
         const lib_name = try Game.get_lib_path(allocator);
         return Self{
             .api = try GameApi.init(lib_name),
             .lib_name = lib_name,
             .allocator = allocator,
-            .window = window,
         };
     }
 
     pub fn run(self: *Self) !void {
         self.api.init();
-        self.window.setUserPointer(self);
 
-        while (!self.window.shouldClose()) {
-            const key_callback = struct {
-                fn callback(window: glfw.Window, key: glfw.Key, scancode: i32, action: glfw.Action, mods: glfw.Mods) void {
-                    const game = window.getUserPointer(Game) orelse unreachable;
-                    _ = scancode;
-
-                    if (key == .r and mods.control and action == .press) {
-                        game.check_for_new_lib() catch {
-                            printStr("Failed to check for new game lib");
-                        };
-                    }
-                }
-            }.callback;
-
-            self.window.setKeyCallback(key_callback);
-
-            // self.window.swapBuffers();
-            glfw.pollEvents();
-            self.api.update();
+        while (true) {
+            const status = self.api.update();
+            if (status == 1) {
+                self.api.shutdown();
+                break;
+            }
+            if (status == 2) {
+                std.log.debug("Status: {d}", .{status});
+                self.check_for_new_lib() catch {
+                    std.log.info("Failed to check for new game lib", .{});
+                };
+            }
         }
+
+        // while (!self.window.shouldClose()) {
+        //     const key_callback = struct {
+        //         fn callback(window: glfw.Window, key: glfw.Key, scancode: i32, action: glfw.Action, mods: glfw.Mods) void {
+        //             const game = window.getUserPointer(Game) orelse unreachable;
+        //             _ = scancode;
+
+        //             if (key == .r and mods.control and action == .press) {
+        //                 game.check_for_new_lib() catch {
+        //                     printStr("Failed to check for new game lib");
+        //                 };
+        //             }
+        //         }
+        //     }.callback;
+
+        //     self.window.setKeyCallback(key_callback);
+
+        //     self.api.update();
+        // }
     }
 
     /// scans the zig-out directory for the game library and its version
@@ -133,6 +139,7 @@ const Game = struct {
         defer self.allocator.free(current_highest_version);
 
         if (std.mem.eql(u8, self.lib_name, current_highest_version)) {
+            std.log.debug("No need to reload game, version is the same: {s}", .{current_highest_version});
             return;
         }
 
@@ -145,7 +152,7 @@ const Game = struct {
         // self.api.unload();
 
         const api = GameApi.init(current_highest_version) catch {
-            printStr("Failed to reload game, this frame, will try again next frame.");
+            std.log.warn("Failed to reload game, this frame, will try again next frame.", .{});
             return;
         };
         api.set_memory(game_memory);
@@ -154,49 +161,13 @@ const Game = struct {
     }
 
     pub fn destroy(self: *Self) void {
-        _ = self; // autofix
-        // self.api.destroy();
+        self.allocator.free(self.lib_name);
     }
 };
 
-// Default GLFW error handling callback
-fn errorCallback(error_code: glfw.ErrorCode, description: [:0]const u8) void {
-    std.log.err("glfw: {}: {s}\n", .{ error_code, description });
-}
-
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
-    defer {
-        const deinit_status = gpa.deinit();
-        //fail test; can't try in defer as defer is executed after we return
-        std.debug.print("Deinit status: {any}\n", .{deinit_status});
-    }
-
-    glfw.setErrorCallback(errorCallback);
-    if (!glfw.init(.{})) {
-        std.log.err("failed to initialize GLFW: {?s}", .{glfw.getErrorString()});
-        std.process.exit(1);
-    }
-    defer glfw.terminate();
-
-    // Create our window
-    var window = glfw.Window.create(1280, 720, "Hello, mach-glfw!", null, null, .{}) orelse {
-        std.log.err("failed to create GLFW window: {?s}", .{glfw.getErrorString()});
-        std.process.exit(1);
-    };
-    defer window.destroy();
-
-    var game = try Game.init(allocator, &window);
+    var game = try Game.init(std.heap.c_allocator);
     defer game.destroy();
 
     try game.run();
-}
-
-fn printAny(args: anytype) void {
-    std.debug.print("{any}\n", .{args});
-}
-
-fn printStr(args: []const u8) void {
-    std.debug.print("{s}\n", .{args});
 }

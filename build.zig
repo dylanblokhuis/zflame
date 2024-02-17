@@ -23,13 +23,13 @@ pub fn build(b: *std.Build) !void {
     });
 
     exe.linkLibC();
-    const glfw_dep = b.dependency("mach-glfw", .{
-        .target = target,
-        .optimize = optimize,
-    });
-    exe.root_module.addImport("mach-glfw", glfw_dep.module("mach-glfw"));
 
     {
+        const glfw_dep = b.dependency("mach-glfw", .{
+            .target = target,
+            .optimize = optimize,
+        });
+
         const lib_name = blk: {
             const lib_files = std.fs.cwd().openDir("./zig-out/lib", .{
                 .iterate = true,
@@ -56,7 +56,7 @@ pub fn build(b: *std.Build) !void {
             .target = target,
             .optimize = optimize,
         });
-
+        lib.root_module.addImport("mach-glfw", glfw_dep.module("mach-glfw"));
         lib.linkLibC();
 
         b.installArtifact(lib);
