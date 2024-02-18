@@ -20,6 +20,8 @@ pub fn build(b: *std.Build) !void {
         .root_source_file = .{ .path = "src/main.zig" },
         .target = target,
         .optimize = optimize,
+        // .use_llvm = false,
+        // .use_lld = false,
     });
 
     exe.linkLibC();
@@ -32,7 +34,6 @@ pub fn build(b: *std.Build) !void {
 
         // we should grab this from the $VULKAN_SDK folder
         const xml_path: []const u8 = b.pathFromRoot("vk.xml");
-        std.debug.print("xml_path: {s}\n", .{xml_path});
         const vkzig_dep = b.dependency("vulkan_zig", .{
             .registry = xml_path,
         });
@@ -62,6 +63,8 @@ pub fn build(b: *std.Build) !void {
             .root_source_file = .{ .path = "src/game.zig" },
             .target = target,
             .optimize = optimize,
+            // .use_llvm = false,
+            // .use_lld = false,
         });
         lib.root_module.addImport("mach-glfw", glfw_dep.module("mach-glfw"));
         lib.root_module.addImport("vulkan_zig", vkzig_dep.module("vulkan-zig"));

@@ -1,98 +1,23 @@
 const std = @import("std");
 const glfw = @import("mach-glfw");
-const vk = @import("vulkan_zig");
-
-const BaseDispatch = vk.BaseWrapper(.{
-    .createInstance = true,
-    .getInstanceProcAddr = true,
-});
-
-const InstanceDispatch = vk.InstanceWrapper(.{
-    .destroyInstance = true,
-    .createDevice = true,
-    .destroySurfaceKHR = true,
-    .enumeratePhysicalDevices = true,
-    .getPhysicalDeviceProperties = true,
-    .enumerateDeviceExtensionProperties = true,
-    .getPhysicalDeviceSurfaceFormatsKHR = true,
-    .getPhysicalDeviceSurfacePresentModesKHR = true,
-    .getPhysicalDeviceSurfaceCapabilitiesKHR = true,
-    .getPhysicalDeviceQueueFamilyProperties = true,
-    .getPhysicalDeviceSurfaceSupportKHR = true,
-    .getPhysicalDeviceMemoryProperties = true,
-    .getDeviceProcAddr = true,
-});
-
-const DeviceDispatch = vk.DeviceWrapper(.{
-    .destroyDevice = true,
-    .getDeviceQueue = true,
-    .createSemaphore = true,
-    .createFence = true,
-    .createImageView = true,
-    .destroyImageView = true,
-    .destroySemaphore = true,
-    .destroyFence = true,
-    .getSwapchainImagesKHR = true,
-    .createSwapchainKHR = true,
-    .destroySwapchainKHR = true,
-    .acquireNextImageKHR = true,
-    .deviceWaitIdle = true,
-    .waitForFences = true,
-    .resetFences = true,
-    .queueSubmit = true,
-    .queuePresentKHR = true,
-    .createCommandPool = true,
-    .destroyCommandPool = true,
-    .allocateCommandBuffers = true,
-    .freeCommandBuffers = true,
-    .queueWaitIdle = true,
-    .createShaderModule = true,
-    .destroyShaderModule = true,
-    .createPipelineLayout = true,
-    .destroyPipelineLayout = true,
-    .createRenderPass = true,
-    .destroyRenderPass = true,
-    .createGraphicsPipelines = true,
-    .destroyPipeline = true,
-    .createFramebuffer = true,
-    .destroyFramebuffer = true,
-    .beginCommandBuffer = true,
-    .endCommandBuffer = true,
-    .allocateMemory = true,
-    .freeMemory = true,
-    .createBuffer = true,
-    .destroyBuffer = true,
-    .getBufferMemoryRequirements = true,
-    .mapMemory = true,
-    .unmapMemory = true,
-    .bindBufferMemory = true,
-    .cmdBeginRenderPass = true,
-    .cmdEndRenderPass = true,
-    .cmdBindPipeline = true,
-    .cmdDraw = true,
-    .cmdSetViewport = true,
-    .cmdSetScissor = true,
-    .cmdBindVertexBuffers = true,
-    .cmdCopyBuffer = true,
-});
+const gpu = @import("./gpu.zig");
+const Allocator = std.mem.Allocator;
 
 const Game = struct {
     window: glfw.Window,
     update_status: GameUpdateStatus,
+    gpu: gpu.Gpu,
 
     const Self = @This();
 
-    pub fn init(game: *Self, window: glfw.Window) void {
+    pub fn init(game: *Self, allocator: Allocator, window: glfw.Window) void {
         game.window = window;
         game.update_status = .nothing;
         game.init_window_callbacks();
-
-        // const vkb = try BaseDispatch.load(null);
-        // const instance = try vkb.createInstance(null, null);
-        // const vki = try InstanceDispatch.load(instance, null);
-        // const vkd = try DeviceDispatch.load(instance, null, null);
-        // vkd.createGraphi
-        // instance.
+        game.gpu = gpu.Gpu.init(allocator, window) catch {
+            std.log.err("Failed to initialize GPU\n", .{});
+            std.process.exit(1);
+        };
     }
 
     pub fn init_window_callbacks(self: *Self) void {
@@ -115,7 +40,7 @@ const Game = struct {
 };
 
 var game_memory: *Game = undefined;
-const allocator = std.heap.c_allocator;
+// const allocator = std.heap.c_allocator;
 
 // Default GLFW error handling callback
 fn errorCallback(error_code: glfw.ErrorCode, description: [:0]const u8) void {
@@ -123,6 +48,9 @@ fn errorCallback(error_code: glfw.ErrorCode, description: [:0]const u8) void {
 }
 
 export fn game_init() void {
+    std.debug.print("\n", .{});
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
     game_memory = allocator.create(Game) catch {
         std.log.err("Failed to allocate initial game memory\n", .{});
         std.process.exit(1);
@@ -135,12 +63,12 @@ export fn game_init() void {
     }
 
     // Create our window
-    const window = glfw.Window.create(1280, 720, "zflame", null, null, .{}) orelse {
+    const window = glfw.Window.create(1280, 720, "zflame", null, null, .{ .client_api = .no_api }) orelse {
         std.log.err("failed to create GLFW window: {?s}", .{glfw.getErrorString()});
         std.process.exit(1);
     };
 
-    game_memory.init(window);
+    game_memory.init(allocator, window);
 }
 
 pub const GameUpdateStatus = enum(c_int) {
@@ -163,8 +91,8 @@ export fn game_shutdown() void {
     game_memory.window.destroy();
     glfw.terminate();
 
-    allocator.destroy(game_memory);
-    game_memory = undefined;
+    // allocator.destroy(game_memory);
+    // game_memory = undefined;
 }
 
 export fn get_game_memory() *anyopaque {
