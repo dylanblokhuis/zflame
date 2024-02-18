@@ -27,14 +27,12 @@ const MemoryType = struct {
             break :blk sizes.device_memblock_size;
         };
 
-        // std.debug.print("allocating {} bytes\n", .{desc.requirements.size});
-
         const size = desc.requirements.size;
 
         const dedicated_allocation = desc.scheme != .managed;
         const requires_personal_block = size > memblock_size;
 
-        std.debug.print("GpuAllocator - MemoryType: {any} -  allocating {any} bytes - is dedicated? {any}\n", .{ self.memory_type_index, desc.requirements.size, dedicated_allocation or requires_personal_block });
+        std.log.debug("GpuAllocator - MemoryType: {any} -  allocating {any} bytes - is dedicated? {any}\n", .{ self.memory_type_index, desc.requirements.size, dedicated_allocation or requires_personal_block });
 
         // Create a dedicated block for large memory allocations or allocations that require dedicated memory allocations.
         if (dedicated_allocation or requires_personal_block) {
@@ -67,11 +65,9 @@ const MemoryType = struct {
 
         var maybe_empty_block_index: ?usize = null;
 
-        std.debug.print("memory_blocks: {d}\n", .{self.memory_blocks.items.len});
         var i = self.memory_blocks.items.len;
         while (i > 0) : (i -= 1) {
-            var maybe_mem_block = self.memory_blocks.items[i];
-            if (maybe_mem_block) |*mem_block| {
+            if (self.memory_blocks.items[i - 1]) |*mem_block| {
                 const allocation = mem_block.sub_allocator.allocate(@intCast(size)) catch |err| switch (err) {
                     Error.OutOfMemory => continue,
                     else => return err,
@@ -91,24 +87,29 @@ const MemoryType = struct {
             }
         }
 
-        var new_memory_block = try MemoryBlock.init(gpu, memblock_size, self.memory_type_index, self.is_mappable, self.buffer_device_address, desc.scheme, false);
+        std.log.info("Creating new memory block", .{});
 
-        const new_block_index = if (maybe_empty_block_index) |block_index| blk: {
-            self.memory_blocks.items[block_index] = new_memory_block;
-            break :blk block_index;
-        } else blk: {
-            try self.memory_blocks.append(new_memory_block);
-            std.debug.print("Something! {d}", .{self.memory_blocks.items.len});
-            break :blk self.memory_blocks.items.len - 1;
+        const new_block_index = blk: {
+            const new_memory_block = try MemoryBlock.init(gpu, memblock_size, self.memory_type_index, self.is_mappable, self.buffer_device_address, desc.scheme, false);
+            const new_block_index = if (maybe_empty_block_index) |block_index| blkk: {
+                self.memory_blocks.items[block_index] = new_memory_block;
+                break :blkk block_index;
+            } else blkk: {
+                try self.memory_blocks.append(new_memory_block);
+                // std.debug.print("Something! {d}", .{self.memory_blocks.items.len});
+                break :blkk self.memory_blocks.items.len - 1;
+            };
+
+            break :blk new_block_index;
         };
 
         self.active_general_blocks += 1;
 
-        new_memory_block = self.memory_blocks.items[new_block_index].?;
+        const memory_block = &self.memory_blocks.items[new_block_index].?;
 
-        const allocation = try new_memory_block.sub_allocator.allocate(@intCast(size));
+        const allocation = try memory_block.sub_allocator.allocate(@intCast(size));
         var mapped_ptr: ?[]u8 = null;
-        if (new_memory_block.mapped_ptr) |ptr| {
+        if (memory_block.mapped_ptr) |ptr| {
             mapped_ptr = ptr[allocation.offset .. allocation.offset + size];
         }
 
@@ -170,9 +171,9 @@ const MemoryBlock = struct {
         }
 
         const sub_allocator = if (alloc_scheme == .dedicated_buffer or alloc_scheme == .dedicated_image or requires_dedicated_block) blk: {
-            break :blk try GpuSubAllocator.initDedicatedBlockAllocator(size);
+            break :blk try GpuSubAllocator.initDedicatedBlockAllocator(1024 * 1024 * 256);
         } else blk: {
-            break :blk try GpuSubAllocator.initOffsetAllocator(gpu.allocator, @intCast(size), null);
+            break :blk try GpuSubAllocator.initOffsetAllocator(gpu.allocator, 1024 * 1024 * 256, null);
         };
 
         return Self{
@@ -272,6 +273,7 @@ pub const GpuAllocator = struct {
             else => vk.MemoryPropertyFlags{},
         };
 
+        // we try to find the preferred memory type first
         var memory_type_index_opt = self.findMemoryTypeIndex(desc.requirements, preferred_mem_flags);
         if (memory_type_index_opt == null) {
             const mem_required_flags = switch (desc.location) {
@@ -289,14 +291,16 @@ pub const GpuAllocator = struct {
                 else => vk.MemoryPropertyFlags{},
             };
 
+            // we can't find the preferred memory type, so we try to find any memory type that fits the requirements
             memory_type_index_opt = self.findMemoryTypeIndex(desc.requirements, mem_required_flags);
         }
 
         if (memory_type_index_opt == null) {
-            std.debug.panic("Failed to find memory type index", .{});
+            return error.NoCompatibleMemoryFound;
         }
 
-        var memory_type = self.memory_types.items[memory_type_index_opt.?];
+        var memory_type = &self.memory_types.items[memory_type_index_opt.?];
+
         if (desc.requirements.size > self.memory_heaps[memory_type.heap_index].size) {
             if (desc.location == .cpu_to_gpu) {
                 const mem_loc_preferred = vk.MemoryPropertyFlags{

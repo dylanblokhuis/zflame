@@ -3,6 +3,7 @@ const builtin = @import("builtin");
 const glfw = @import("mach-glfw");
 const vk = @import("vulkan_zig");
 const GpuAllocator = @import("./gpu_allocator.zig");
+const Swapchain = @import("./swapchain.zig").Swapchain;
 const Allocator = std.mem.Allocator;
 
 const BaseDispatch = vk.BaseWrapper(.{
@@ -114,6 +115,8 @@ pub const Gpu = struct {
     gpu_allocator: GpuAllocator.GpuAllocator,
     allocator: Allocator,
 
+    swapchain: Swapchain,
+
     const Self = @This();
 
     pub fn init(allocator: Allocator, window: glfw.Window) !Self {
@@ -163,7 +166,7 @@ pub const Gpu = struct {
             .api_version = vk.API_VERSION_1_2,
         };
 
-        std.log.info("Creating Vulkan instance with \n extensions: {s}\n layers: {s}", .{
+        std.log.info("Creating Vulkan instance with \n extensions: {s}\n layers: {s}\n", .{
             instance_extensions.items,
             layer_names.items,
         });
@@ -206,7 +209,7 @@ pub const Gpu = struct {
 
         {
             const buffer_info = vk.BufferCreateInfo{
-                .size = 268435456,
+                .size = 64,
                 .usage = vk.BufferUsageFlags{ .storage_buffer_bit = true },
                 .sharing_mode = .exclusive,
             };
@@ -214,7 +217,7 @@ pub const Gpu = struct {
             const buffer = try self.vkd.createBuffer(self.dev, &buffer_info, null);
 
             const buffer_info2 = vk.BufferCreateInfo{
-                .size = 268435456,
+                .size = 1024,
                 .usage = vk.BufferUsageFlags{ .storage_buffer_bit = true },
                 .sharing_mode = .exclusive,
             };
@@ -223,17 +226,17 @@ pub const Gpu = struct {
 
             const mem_reqs = self.vkd.getBufferMemoryRequirements(self.dev, buffer);
             const mem_reqs2 = self.vkd.getBufferMemoryRequirements(self.dev, buffer2);
-            // const
 
-            std.debug.print("{any}", .{mem_reqs});
-
-            const allocation = try self.gpu_allocator.allocate(&self, GpuAllocator.AllocationCreateDesc{
+            var allocation = try self.gpu_allocator.allocate(&self, GpuAllocator.AllocationCreateDesc{
                 .requirements = mem_reqs,
-                .location = .gpu_only,
+                .location = .cpu_to_gpu,
                 .linear = true,
                 .scheme = .managed,
                 .name = "test",
             });
+
+            var yo = [_]u8{ 4, 5, 6, 7 };
+            allocation.mapped_ptr = &yo;
 
             const allocation2 = try self.gpu_allocator.allocate(&self, GpuAllocator.AllocationCreateDesc{
                 .requirements = mem_reqs2,
@@ -242,15 +245,23 @@ pub const Gpu = struct {
                 .scheme = .managed,
                 .name = "test2",
             });
+            _ = allocation2; // autofix
 
-            std.debug.print("{any}", .{allocation});
-            std.debug.print("{any}", .{allocation2});
+            std.debug.print("{any}\n", .{allocation});
         }
+
+        const size = window.getSize();
+        self.swapchain = try Swapchain.init(&self, allocator, .{
+            .width = size.width,
+            .height = size.height,
+        });
 
         return self;
     }
 
     pub fn deinit(self: Self) void {
+        self.swapchain.deinit();
+
         self.vki.destroyDebugUtilsMessengerEXT(self.instance, self.debug_messenger, null);
         self.vkd.destroyDevice(self.dev, null);
         self.vki.destroySurfaceKHR(self.instance, self.surface, null);
@@ -286,7 +297,6 @@ pub const Gpu = struct {
     }
 
     pub fn allocate(self: Self, requirements: vk.MemoryRequirements, flags: vk.MemoryPropertyFlags) !vk.DeviceMemory {
-        std.debug.print("{any}", .{requirements});
         return try self.vkd.allocateMemory(self.dev, &.{
             .allocation_size = requirements.size,
             .memory_type_index = try self.findMemoryTypeIndex(requirements.memory_type_bits, flags),
@@ -350,7 +360,7 @@ fn initializeCandidate(allocator: Allocator, vki: InstanceDispatch, candidate: D
         }
     }
 
-    std.log.info("Creating Vulkan device with \n extensions: {s}", .{device_extensions.items});
+    std.log.info("Creating Vulkan device with \n extensions: {s}\n", .{device_extensions.items});
 
     return try vki.createDevice(candidate.physical_device, &.{
         .flags = .{},
