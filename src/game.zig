@@ -1,7 +1,8 @@
 const std = @import("std");
 const glfw = @import("mach-glfw");
-const gpu = @import("./gpu.zig");
-const World = @import("./world.zig").World;
+const gpu = @import("gpu.zig");
+const World = @import("world.zig").World;
+
 const Allocator = std.mem.Allocator;
 
 const Game = struct {
@@ -12,7 +13,7 @@ const Game = struct {
 
     const Self = @This();
 
-    pub fn init(game: *Self, allocator: Allocator, window: glfw.Window) void {
+    pub fn init(game: *Self, allocator: Allocator, window: glfw.Window) !void {
         game.window = window;
         game.update_status = .nothing;
         game.init_window_callbacks();
@@ -24,6 +25,9 @@ const Game = struct {
             std.log.err("Failed to initialize world\n", .{});
             std.process.exit(1);
         };
+
+        // we adding systems here
+        try game.world.add_system(.on_start, @import("systems/setup.zig").setup);
     }
 
     pub fn init_window_callbacks(self: *Self) void {
@@ -43,11 +47,10 @@ const Game = struct {
         window.setUserPointer(self);
         window.setKeyCallback(key_callback);
     }
+};
 
-    pub fn update(self: *Self) void {
-        _ = self; // autofix
-
-    }
+const Henk = struct {
+    yo: f32,
 };
 
 var game_memory: *Game = undefined;
@@ -79,7 +82,11 @@ export fn game_init() void {
         std.process.exit(1);
     };
 
-    game_memory.init(allocator, window);
+    game_memory.init(allocator, window) catch {
+        std.log.err("Failed to initialize game\n", .{});
+        std.process.exit(1);
+    };
+    game_memory.world.run_systems(.on_start);
 }
 
 pub const GameUpdateStatus = enum(c_int) {
@@ -94,7 +101,7 @@ export fn game_update() GameUpdateStatus {
     }
     glfw.pollEvents();
 
-    game_memory.update();
+    game_memory.world.run_systems(.on_update);
 
     defer game_memory.update_status = .nothing;
     return game_memory.update_status;
