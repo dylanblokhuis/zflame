@@ -1,12 +1,14 @@
 const std = @import("std");
 const glfw = @import("mach-glfw");
 const gpu = @import("./gpu.zig");
+const World = @import("./world.zig").World;
 const Allocator = std.mem.Allocator;
 
 const Game = struct {
     window: glfw.Window,
     update_status: GameUpdateStatus,
     gpu: gpu.Gpu,
+    world: World,
 
     const Self = @This();
 
@@ -16,6 +18,10 @@ const Game = struct {
         game.init_window_callbacks();
         game.gpu = gpu.Gpu.init(allocator, window) catch {
             std.log.err("Failed to initialize GPU\n", .{});
+            std.process.exit(1);
+        };
+        game.world = World.init(allocator) catch {
+            std.log.err("Failed to initialize world\n", .{});
             std.process.exit(1);
         };
     }
@@ -36,6 +42,11 @@ const Game = struct {
         const window = self.window;
         window.setUserPointer(self);
         window.setKeyCallback(key_callback);
+    }
+
+    pub fn update(self: *Self) void {
+        _ = self; // autofix
+
     }
 };
 
@@ -82,6 +93,8 @@ export fn game_update() GameUpdateStatus {
         return .close;
     }
     glfw.pollEvents();
+
+    game_memory.update();
 
     defer game_memory.update_status = .nothing;
     return game_memory.update_status;
