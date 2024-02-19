@@ -797,14 +797,14 @@ pub const OffsetAllocator = struct {
         }
 
         // debug
-        std.debug.print("putting node {} into freelist[{}] (removeNodeFromBin)\n", .{ node_index, self.free_offset + 1 });
+        // std.debug.print("putting node {} into freelist[{}] (removeNodeFromBin)\n", .{ node_index, self.free_offset + 1 });
         self.free_offset += 1;
         self.free_nodes.?[self.free_offset] = node_index;
 
         self.free_storage -= node.data_size;
 
         // debug
-        std.debug.print("free storage: {} ({}) (removeNodeFromBin)\n", .{ self.free_storage, node.data_size });
+        // std.debug.print("free storage: {} ({}) (removeNodeFromBin)\n", .{ self.free_storage, node.data_size });
     }
 
     pub fn getSize(self: *const OffsetAllocator) u64 {

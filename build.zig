@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 // Although this function looks imperative, note that its job is to
 // declaratively construct a build graph that will be executed by an external
@@ -32,12 +33,6 @@ pub fn build(b: *std.Build) !void {
             .optimize = optimize,
         });
 
-        // we should grab this from the $VULKAN_SDK folder
-        const xml_path: []const u8 = b.pathFromRoot("vk.xml");
-        const vkzig_dep = b.dependency("vulkan_zig", .{
-            .registry = xml_path,
-        });
-
         const lib_name = blk: {
             const lib_files = std.fs.cwd().openDir("./zig-out/lib", .{
                 .iterate = true,
@@ -66,9 +61,37 @@ pub fn build(b: *std.Build) !void {
             // .use_llvm = false,
             // .use_lld = false,
         });
-        lib.root_module.addImport("mach-glfw", glfw_dep.module("mach-glfw"));
-        lib.root_module.addImport("vulkan_zig", vkzig_dep.module("vulkan-zig"));
+
         lib.linkLibC();
+
+        var maybe_xml_path: ?[]const u8 = null;
+        if (std.process.hasEnvVarConstant("VULKAN_SDK")) {
+            const vulkan_sdk_path = std.process.getEnvVarOwned(b.allocator, "VULKAN_SDK") catch {
+                return error.@"VULKAN_SDK environment variable not set";
+            };
+            defer b.allocator.free(vulkan_sdk_path);
+
+            const vulkan_lib = try std.fmt.allocPrint(b.allocator, "{s}/lib", .{vulkan_sdk_path});
+            defer b.allocator.free(vulkan_lib);
+            
+            exe.addLibraryPath(.{ .path = vulkan_lib });
+            lib.addLibraryPath(.{ .path = vulkan_lib });
+
+            maybe_xml_path = try std.fmt.allocPrint(b.allocator, "{s}/share/vulkan/registry/vk.xml", .{vulkan_sdk_path});
+        }
+
+        if (maybe_xml_path) |xml_path| {
+            const vkzig_dep = b.dependency("vulkan_zig", .{
+                .registry = xml_path,
+            });
+
+            lib.root_module.addImport("vulkan_zig", vkzig_dep.module("vulkan-zig"));
+            b.allocator.free(xml_path);
+        } else {
+            return error.@"VULKAN_SDK environment variable not set";
+        }
+
+        lib.root_module.addImport("mach-glfw", glfw_dep.module("mach-glfw"));
 
         b.installArtifact(lib);
     }

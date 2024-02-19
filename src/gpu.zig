@@ -87,12 +87,12 @@ const required_device_extensions = [_][*:0]const u8{
     vk.extension_info.khr_dynamic_rendering.name,
     vk.extension_info.ext_descriptor_indexing.name,
     vk.extension_info.ext_buffer_device_address.name,
+    vk.extension_info.khr_get_memory_requirements_2.name,
 };
 
 const optional_device_extensions = [_][*:0]const u8{};
 
 const optional_instance_extensions = [_][*:0]const u8{
-    vk.extension_info.khr_get_physical_device_properties_2.name,
     vk.extension_info.ext_debug_utils.name,
 };
 
@@ -153,6 +153,11 @@ pub const Gpu = struct {
             }
         }
 
+        if (builtin.os.tag == .macos) {
+            try instance_extensions.append(vk.extension_info.khr_portability_enumeration.name);
+            try instance_extensions.append(vk.extension_info.khr_get_physical_device_properties_2.name);
+        }
+
         var layer_names = std.ArrayList([*:0]const u8).init(allocator);
         defer layer_names.deinit();
 
@@ -183,7 +188,6 @@ pub const Gpu = struct {
         }, null);
 
         self.vki = try InstanceDispatch.load(self.instance, self.vkb.dispatch.vkGetInstanceProcAddr);
-
         if ((glfw.createWindowSurface(self.instance, window, null, &self.surface)) != @intFromEnum(vk.Result.success)) {
             return error.SurfaceInitFailed;
         }
@@ -247,7 +251,7 @@ pub const Gpu = struct {
             });
             _ = allocation2; // autofix
 
-            std.debug.print("{any}\n", .{allocation});
+            // std.debug.print("{any}\n", .{allocation});
         }
 
         const size = window.getSize();
@@ -342,6 +346,10 @@ fn initializeCandidate(allocator: Allocator, vki: InstanceDispatch, candidate: D
     defer device_extensions.deinit();
 
     try device_extensions.appendSlice(required_device_extensions[0..required_device_extensions.len]);
+
+    if (builtin.os.tag == .macos) {
+        try device_extensions.append(vk.extension_info.khr_portability_subset.name);
+    }
 
     var count: u32 = undefined;
     _ = try vki.enumerateDeviceExtensionProperties(candidate.physical_device, null, &count, null);
@@ -508,28 +516,22 @@ fn checkExtensionSupport(
 
 fn debug_callback(
     message_severity: vk.DebugUtilsMessageSeverityFlagsEXT,
-    message_types: vk.DebugUtilsMessageTypeFlagsEXT,
+    _: vk.DebugUtilsMessageTypeFlagsEXT,
     p_callback_data: ?*const vk.DebugUtilsMessengerCallbackDataEXT,
-    p_user_data: ?*anyopaque,
+    _: ?*anyopaque,
 ) callconv(vk.vulkan_call_conv) vk.Bool32 {
-    _ = message_severity; // autofix
-    // _ = message_severity; // autofix
-    _ = message_types; // autofix
-    _ = p_user_data; // autofix
-    std.debug.print("validation layer: {s}\n", .{p_callback_data.?.p_message});
-    // const callback_data = p_callback_data.?;
-    // const message = callback_data.p_message.?;
-    // std.log.info("validation layer: {s}", .{message});
+    if (p_callback_data) |data| {
+        const format = "{?s}";
 
-    // if (message_severity == vk.DebugUtilsMessageSeverityFlagsEXT.verbose_bit_ext) {
-    //     std.log.info("validation layer: {s}", .{p_callback_data.?.p_message});
-    // } else if (message_severity == .info_bit_ext) {
-    //     std.log.info("validation layer: {s}", .{p_callback_data.?.p_message});
-    // } else if (message_severity == .warning_bit_ext) {
-    //     std.log.warn("validation layer: {s}", .{p_callback_data.?.p_message});
-    // } else if (message_severity == .error_bit_ext) {
-    //     std.log.err("validation layer: {s}", .{p_callback_data.?.p_message});
-    // }
-
+        if (message_severity.error_bit_ext) {
+            std.log.err(format, .{data.p_message});
+        } else if (message_severity.warning_bit_ext) {
+            std.log.warn(format, .{data.p_message});
+        } else if (message_severity.info_bit_ext) {
+            std.log.info(format, .{data.p_message});
+        } else {
+            std.log.debug(format, .{data.p_message});
+        }
+    }
     return vk.FALSE;
 }
