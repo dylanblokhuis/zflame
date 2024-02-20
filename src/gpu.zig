@@ -86,7 +86,7 @@ const required_device_extensions = [_][*:0]const u8{
     vk.extension_info.khr_swapchain.name,
     vk.extension_info.khr_dynamic_rendering.name,
     vk.extension_info.ext_descriptor_indexing.name,
-    vk.extension_info.ext_buffer_device_address.name,
+    // vk.extension_info.ext_buffer_device_address.name,
     vk.extension_info.khr_get_memory_requirements_2.name,
 };
 
@@ -161,7 +161,7 @@ pub const Gpu = struct {
         var layer_names = std.ArrayList([*:0]const u8).init(allocator);
         defer layer_names.deinit();
 
-        // try layer_names.append("VK_LAYER_KHRONOS_validation");
+        try layer_names.append("VK_LAYER_KHRONOS_validation");
 
         const app_info = vk.ApplicationInfo{
             .p_application_name = app_name,
@@ -289,23 +289,6 @@ pub const Gpu = struct {
         };
         self.debug_messenger = try self.vki.createDebugUtilsMessengerEXT(self.instance, &debug_create_info, null);
     }
-
-    pub fn findMemoryTypeIndex(self: Self, memory_type_bits: u32, flags: vk.MemoryPropertyFlags) !u32 {
-        for (self.mem_props.memory_types[0..self.mem_props.memory_type_count], 0..) |mem_type, i| {
-            if (memory_type_bits & (@as(u32, 1) << @as(u5, @truncate(i))) != 0 and mem_type.property_flags.contains(flags)) {
-                return @as(u32, @truncate(i));
-            }
-        }
-
-        return error.NoSuitableMemoryType;
-    }
-
-    pub fn allocate(self: Self, requirements: vk.MemoryRequirements, flags: vk.MemoryPropertyFlags) !vk.DeviceMemory {
-        return try self.vkd.allocateMemory(self.dev, &.{
-            .allocation_size = requirements.size,
-            .memory_type_index = try self.findMemoryTypeIndex(requirements.memory_type_bits, flags),
-        }, null);
-    }
 };
 
 pub const Queue = struct {
@@ -370,7 +353,18 @@ fn initializeCandidate(allocator: Allocator, vki: InstanceDispatch, candidate: D
 
     std.log.info("Creating Vulkan device with \n extensions: {s}\n", .{device_extensions.items});
 
-    return try vki.createDevice(candidate.physical_device, &.{
+    const dynamic_rendering_features = &vk.PhysicalDeviceDynamicRenderingFeatures{
+        .dynamic_rendering = vk.TRUE,
+    };
+
+    const vulkan_1_2_features = vk.PhysicalDeviceVulkan12Features{
+        .buffer_device_address = vk.TRUE,
+        .descriptor_indexing = vk.TRUE,
+        .p_next = @constCast(dynamic_rendering_features),
+    };
+
+    // p_enabled_features
+    return try vki.createDevice(candidate.physical_device, &vk.DeviceCreateInfo{
         .flags = .{},
         .queue_create_info_count = queue_count,
         .p_queue_create_infos = &qci,
@@ -379,6 +373,7 @@ fn initializeCandidate(allocator: Allocator, vki: InstanceDispatch, candidate: D
         .enabled_extension_count = @as(u32, @intCast(device_extensions.items.len)),
         .pp_enabled_extension_names = @as([*]const [*:0]const u8, @ptrCast(device_extensions.items)),
         .p_enabled_features = null,
+        .p_next = &vulkan_1_2_features,
     }, null);
 }
 
