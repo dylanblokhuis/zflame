@@ -24,7 +24,7 @@ const EntityFlags = packed struct(u2) {
 
 const SystemSchedule = enum { on_start, on_update };
 
-const SystemFunc = fn (world: *World) void;
+const SystemFunc = fn (params: *SystemParams) void;
 
 const on_start_systems = [_]*const SystemFunc{
     @import("./systems/rendering.zig").startup,
@@ -35,6 +35,16 @@ const on_update_systems = [_]*const SystemFunc{
 
 pub const Resources = struct { window: glfw.Window, gpu: gpu.Gpu };
 
+/// per frame resources that are allocated and deallocated every frame
+const FrameResources = struct {
+    bump: std.mem.Allocator,
+};
+
+pub const SystemParams = struct {
+    world: *World,
+    frame: *FrameResources,
+};
+
 pub const World = struct {
     entities: std.ArrayListUnmanaged(Entity),
     allocator: Allocator,
@@ -43,7 +53,6 @@ pub const World = struct {
     const Self = @This();
 
     pub fn init(allocator: Allocator, window: glfw.Window) !Self {
-        std.log.debug("size: {d}", .{@sizeOf(Resources)});
         return Self{
             .entities = try std.ArrayListUnmanaged(Entity).initCapacity(allocator, 0),
             .allocator = allocator,
@@ -59,13 +68,18 @@ pub const World = struct {
     }
 
     pub fn run_systems(self: *Self, schedule: SystemSchedule) void {
+        var arena = std.heap.ArenaAllocator.init(self.allocator);
+        defer arena.deinit();
+        var frame_resources = FrameResources{ .bump = arena.allocator() };
+        var params = SystemParams{ .world = self, .frame = &frame_resources };
+
         if (schedule == SystemSchedule.on_start) {
             inline for (on_start_systems) |system| {
-                system(self);
+                system(&params);
             }
         } else if (schedule == SystemSchedule.on_update) {
             inline for (on_update_systems) |system| {
-                system(self);
+                system(&params);
             }
         }
     }

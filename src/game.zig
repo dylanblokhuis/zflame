@@ -16,10 +16,7 @@ const Game = struct {
         game.window = window;
         game.update_status = .nothing;
         game.init_window_callbacks();
-        game.world = World.init(allocator, window) catch {
-            std.log.err("Failed to initialize world\n", .{});
-            std.process.exit(1);
-        };
+        game.world = try World.init(allocator, window);
     }
 
     pub fn init_window_callbacks(self: *Self) void {
@@ -46,7 +43,6 @@ const Henk = struct {
 };
 
 var game_memory: *Game = undefined;
-// const allocator = std.heap.c_allocator;
 
 // Default GLFW error handling callback
 fn errorCallback(error_code: glfw.ErrorCode, description: [:0]const u8) void {
