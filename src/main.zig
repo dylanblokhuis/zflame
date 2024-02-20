@@ -114,8 +114,9 @@ const Game = struct {
             _ = iter.next();
 
             if (iter.next()) |lib_version| {
-                // remove last 3 bytes
-                const version_num = std.fmt.parseInt(u32, lib_version[0..(lib_version.len - 3)], 10) catch {
+                // remove extension
+                const bytes_to_remove = if (builtin.os.tag == .macos) 6 else if (builtin.os.tag == .windows) 4 else 3;
+                const version_num = std.fmt.parseInt(u32, lib_version[0..(lib_version.len - bytes_to_remove)], 10) catch {
                     continue;
                 };
                 if (version_num > current_highest_version) {

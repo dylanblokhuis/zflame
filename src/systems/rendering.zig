@@ -8,5 +8,5 @@ pub fn startup(world: *World) void {
 
 pub fn system(world: *World) void {
     _ = world; // autofix
-    // std.log.debug("Rendering!", .{});
+    // std.log.debug("How it jsut works!", .{});
 }
