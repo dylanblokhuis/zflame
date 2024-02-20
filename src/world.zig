@@ -1,6 +1,6 @@
 const std = @import("std");
 const math = @import("./math.zig");
-const gpu = @import("gpu.zig");
+const Gpu = @import("gpu.zig").Gpu;
 const glfw = @import("mach-glfw");
 
 const Allocator = std.mem.Allocator;
@@ -24,7 +24,7 @@ const EntityFlags = packed struct(u2) {
 
 const SystemSchedule = enum { on_start, on_update };
 
-const SystemFunc = fn (params: *SystemParams) void;
+const SystemFunc = fn (params: SystemParams) void;
 
 const on_start_systems = [_]*const SystemFunc{
     @import("./systems/rendering.zig").startup,
@@ -33,16 +33,22 @@ const on_update_systems = [_]*const SystemFunc{
     @import("./systems/rendering.zig").system,
 };
 
-pub const Resources = struct { window: glfw.Window, gpu: gpu.Gpu };
-
-/// per frame resources that are allocated and deallocated every frame
-const FrameResources = struct {
-    bump: std.mem.Allocator,
-};
+pub const Resources = struct { window: glfw.Window, gpu: Gpu };
 
 pub const SystemParams = struct {
     world: *World,
-    frame: *FrameResources,
+    /// A bump allocator for temporary allocations. All allocations are freed at the end of the frame.
+    bump: *Allocator,
+
+    const Self = @This();
+
+    pub inline fn resources(self: Self) *Resources {
+        return &self.world.resources;
+    }
+
+    pub inline fn gpu(self: Self) *Gpu {
+        return &self.world.resources.gpu;
+    }
 };
 
 pub const World = struct {
@@ -58,7 +64,7 @@ pub const World = struct {
             .allocator = allocator,
             .resources = Resources{
                 .window = window,
-                .gpu = try gpu.Gpu.init(allocator, window),
+                .gpu = try Gpu.init(allocator, window),
             },
         };
     }
@@ -70,16 +76,16 @@ pub const World = struct {
     pub fn run_systems(self: *Self, schedule: SystemSchedule) void {
         var arena = std.heap.ArenaAllocator.init(self.allocator);
         defer arena.deinit();
-        var frame_resources = FrameResources{ .bump = arena.allocator() };
-        var params = SystemParams{ .world = self, .frame = &frame_resources };
+        var allocator = arena.allocator();
+        const params = SystemParams{ .world = self, .bump = &allocator };
 
         if (schedule == SystemSchedule.on_start) {
             inline for (on_start_systems) |system| {
-                system(&params);
+                system(params);
             }
         } else if (schedule == SystemSchedule.on_update) {
             inline for (on_update_systems) |system| {
-                system(&params);
+                system(params);
             }
         }
     }

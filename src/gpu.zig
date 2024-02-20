@@ -115,6 +115,10 @@ pub const Gpu = struct {
     gpu_allocator: GpuAllocator.GpuAllocator,
     allocator: Allocator,
 
+    command_pool: vk.CommandPool,
+    command_buffer: vk.CommandBuffer,
+    fence: vk.Fence,
+
     swapchain: Swapchain,
 
     const Self = @This();
@@ -203,6 +207,25 @@ pub const Gpu = struct {
         self.present_queue = Queue.init(self.vkd, self.dev, candidate.queues.present_family);
 
         self.mem_props = self.vki.getPhysicalDeviceMemoryProperties(self.physical_device);
+
+        self.command_pool = try self.vkd.createCommandPool(self.dev, &vk.CommandPoolCreateInfo{
+            .flags = vk.CommandPoolCreateFlags{
+                .reset_command_buffer_bit = true,
+            },
+            .queue_family_index = candidate.queues.graphics_family,
+        }, null);
+
+        try self.vkd.allocateCommandBuffers(self.dev, &vk.CommandBufferAllocateInfo{
+            .command_buffer_count = 1,
+            .command_pool = self.command_pool,
+            .level = vk.CommandBufferLevel.primary,
+        }, @ptrCast(&self.command_buffer));
+
+        self.fence = try self.vkd.createFence(self.dev, &vk.FenceCreateInfo{
+            .flags = .{
+                .signaled_bit = true,
+            },
+        }, null);
 
         std.log.info("GPU selected: {s}", .{self.props.device_name});
 
