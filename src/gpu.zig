@@ -1,7 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const glfw = @import("mach-glfw");
-const vk = @import("vulkan_zig");
+pub const vk = @import("vulkan_zig");
 const GpuAllocator = @import("./gpu_allocator.zig");
 const Swapchain = @import("./swapchain.zig").Swapchain;
 const Allocator = std.mem.Allocator;
