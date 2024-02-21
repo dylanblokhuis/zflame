@@ -73,7 +73,7 @@ pub fn build(b: *std.Build) !void {
 
             const vulkan_lib = try std.fmt.allocPrint(b.allocator, "{s}/lib", .{vulkan_sdk_path});
             defer b.allocator.free(vulkan_lib);
-            
+
             exe.addLibraryPath(.{ .path = vulkan_lib });
             lib.addLibraryPath(.{ .path = vulkan_lib });
 
@@ -93,7 +93,51 @@ pub fn build(b: *std.Build) !void {
 
         lib.root_module.addImport("mach-glfw", glfw_dep.module("mach-glfw"));
 
+        {
+            const check = b.step("check", "Check if the game compiles");
+            check.dependOn(&lib.step);
+        }
         b.installArtifact(lib);
+    }
+
+    compile_shaders: {
+        const build_shaders = b.step("shaders", "Compile shaders");
+
+        const shaders = std.fs.cwd().openDir("shaders", .{ .iterate = true }) catch {
+            std.log.warn("No shaders dir found, not compiling..", .{});
+            break :compile_shaders;
+        };
+
+        var shader_files = try std.ArrayList([]const u8).initCapacity(b.allocator, 5);
+        defer shader_files.deinit();
+
+        var iterator = shaders.iterate();
+        while (try iterator.next()) |entry| {
+            if (entry.kind != .file) {
+                continue;
+            }
+            try shader_files.append(entry.name);
+        }
+
+        for (shader_files.items) |file| {
+            var split_file = std.mem.splitSequence(u8, file, ".");
+            const filename = split_file.next().?;
+            const ext = split_file.next().?;
+
+            const output_path = try std.fmt.allocPrint(b.allocator, "./zig-out/shaders/{s}.{s}{s}", .{ filename, ext, ".spv" });
+            defer b.allocator.free(output_path);
+
+            const input_path = try std.fmt.allocPrint(b.allocator, "./shaders/{s}", .{file});
+            defer b.allocator.free(input_path);
+
+            // create folder if not exists
+            try std.fs.cwd().makePath("./zig-out/shaders/");
+
+            const argv = [_][]const u8{ "glslang", "-I./shaders/includes", "--target-env", "vulkan1.2", "-S", ext, input_path, "-o", output_path };
+            build_shaders.evalChildProcess(&argv) catch |err| {
+                std.log.err("Failed to compile shaders {any}", .{err});
+            };
+        }
     }
 
     // This declares intent for the executable to be installed into the
