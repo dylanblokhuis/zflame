@@ -130,10 +130,13 @@ pub fn build(b: *std.Build) !void {
             const input_path = try std.fmt.allocPrint(b.allocator, "./shaders/{s}", .{file});
             defer b.allocator.free(input_path);
 
+            const shader_stage = try std.fmt.allocPrint(b.allocator, "-fshader-stage={s}", .{ext});
+            defer b.allocator.free(shader_stage);
+
             // create folder if not exists
             try std.fs.cwd().makePath("./zig-out/shaders/");
 
-            const argv = [_][]const u8{ "glslang", "-I./shaders/includes", "--target-env", "vulkan1.2", "-S", ext, input_path, "-o", output_path };
+            const argv = [_][]const u8{ "glslc", input_path, "-I", "./shaders/includes", "-std=450", "--target-env=vulkan1.2", shader_stage, "-o", output_path };
             build_shaders.evalChildProcess(&argv) catch |err| {
                 std.log.err("Failed to compile shaders {any}", .{err});
             };

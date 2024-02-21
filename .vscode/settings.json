@@ -1,0 +1,5 @@
+{
+  "shaderc-lint.defaultGLSLVersion": "450",
+  "shaderc-lint.includeSupport": true,
+  "shaderc-lint.glslcArgs": "-fshader-stage=vert"
+}
