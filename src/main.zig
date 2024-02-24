@@ -12,6 +12,7 @@ const GameApi = struct {
     const Self = @This();
 
     pub fn init(path: []const u8) !Self {
+        std.debug.print("Loading game lib: {s}\n", .{path});
         var library = try std.DynLib.open(path);
         const game_init_symbol = &library.lookup(*const fn () void, "game_init");
 

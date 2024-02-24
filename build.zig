@@ -63,6 +63,9 @@ pub fn build(b: *std.Build) !void {
         });
 
         lib.linkLibC();
+        lib.addCSourceFile(.{ .file = .{ .path = "./c/cgltf.c" }, .flags = &[_][]const u8{ "-std=c99", "-DCGLTF_IMPLEMENTATION", "-D_CRT_SECURE_NO_WARNINGS" } });
+        lib.addIncludePath(.{ .path = "./include" });
+        // lib.c
 
         var maybe_xml_path: ?[]const u8 = null;
         if (std.process.hasEnvVarConstant("VULKAN_SDK")) {
@@ -93,10 +96,10 @@ pub fn build(b: *std.Build) !void {
 
         lib.root_module.addImport("mach-glfw", glfw_dep.module("mach-glfw"));
 
-        {
-            const check = b.step("check", "Check if the game compiles");
-            check.dependOn(&lib.step);
-        }
+        // {
+        //     const check = b.step("check", "Check if the game compiles");
+        //     check.dependOn(&lib.step);
+        // }
         b.installArtifact(lib);
     }
 
